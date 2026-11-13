@@ -1,5 +1,4 @@
 import React from "react";
-import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import RegistrationForm from "@/components/RegistrationForm";
 import { EVENT_DETAILS } from "@/lib/constants";
@@ -82,22 +81,12 @@ export default function HomePage() {
 
       {/* Footer */}
       <footer className="mt-auto bg-white border-t border-[#E5EAF1] py-6 text-xs text-[#64748B]">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 flex items-center justify-center text-center">
           <div className="flex items-center gap-2">
             <span className="font-cooper text-base text-[#0756A0]">SSF</span>
             <span className="font-bold text-[#172033]">
               Puthanathani Sector Student Council 2026
             </span>
-          </div>
-
-          <div className="flex items-center gap-4 text-xs font-medium">
-            <Link href="/lookup" className="hover:text-[#0756A0] transition-colors">
-              Find Pass
-            </Link>
-            <span>•</span>
-            <Link href="/admin" className="text-[#0756A0] font-semibold hover:underline">
-              Admin Portal
-            </Link>
           </div>
         </div>
       </footer>
