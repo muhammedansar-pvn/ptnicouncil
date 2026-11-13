@@ -254,8 +254,10 @@ export default function AdminPage() {
       <div className="min-h-screen flex items-center justify-center bg-[#F7F9FC] p-4 text-[#172033]">
         <div className="w-full max-w-sm bg-white rounded-xl border border-[#E5EAF1] p-6 sm:p-8 shadow-sm">
           <div className="text-center mb-6">
-            <div className="w-12 h-12 rounded-lg bg-[#0756A0] text-white flex items-center justify-center mx-auto mb-3 font-cooper text-xl">
-              SSF
+            <div className="select-none mb-2">
+              <span className="font-cooper text-3xl text-[#0756A0] tracking-tight">
+                SSF
+              </span>
             </div>
             <h1 className="font-extrabold text-xl text-[#172033] uppercase">Admin Portal</h1>
             <p className="text-xs text-[#64748B] mt-0.5">SSF Puthanathani Sector Student Council 2026</p>
@@ -340,9 +342,9 @@ export default function AdminPage() {
       <header className="bg-white border-b border-[#E5EAF1] sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-md bg-[#0756A0] text-white flex items-center justify-center font-cooper text-base shrink-0">
+            <span className="font-cooper text-2xl text-[#0756A0] tracking-tight shrink-0 select-none">
               SSF
-            </div>
+            </span>
             <div>
               <h1 className="font-bold text-sm sm:text-base text-[#172033] uppercase leading-tight">
                 Student Council Administration

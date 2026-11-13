@@ -16,15 +16,15 @@ export default function HomePage() {
         {/* A. Header / Branding Section */}
         <div className="text-center max-w-xl mx-auto space-y-3 mb-6 sm:mb-8">
           {/* Prominent SSF Logo Mark - Cooper Black strictly on SSF */}
-          <div className="inline-flex items-center justify-center w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-[#0756A0] text-white shadow-xs">
-            <span className="font-cooper text-3xl sm:text-4xl tracking-tighter select-none">
+          <div className="inline-block select-none">
+            <span className="font-cooper text-5xl sm:text-6xl text-[#0756A0] tracking-tight">
               SSF
             </span>
           </div>
 
           <div>
             <h1 className="font-extrabold text-2xl sm:text-3xl md:text-4xl text-[#172033] uppercase tracking-tight leading-tight">
-              SSF Puthanathani Sector <br />
+              Puthanathani Sector <br />
               <span className="text-[#0756A0]">Student Council</span>
             </h1>
             <p className="text-sm font-semibold text-[#0756A0] mt-1.5 font-malayalam">
