@@ -2,6 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
+import Image from "next/image";
 
 export default function Navbar() {
   return (
@@ -9,18 +10,15 @@ export default function Navbar() {
       <div className="max-w-4xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16 sm:h-20">
           {/* Brand */}
-          <Link href="/" className="flex items-center gap-3">
-            <span className="font-cooper text-2xl sm:text-3xl text-[#0756A0] tracking-tight shrink-0 select-none">
-              SSF
-            </span>
-            <div className="flex flex-col">
-              <span className="font-bold text-sm sm:text-base text-[#172033] leading-tight tracking-tight uppercase">
-                Puthanathani Sector
-              </span>
-              <span className="text-[11px] sm:text-xs font-semibold text-[#0756A0] tracking-wider uppercase">
-                Student Council 2026
-              </span>
-            </div>
+          <Link href="/" className="inline-flex items-center focus:outline-none" aria-label="Home">
+            <Image
+              src="/navbar-brand.png"
+              alt="Samastha Centenary"
+              width={1024}
+              height={307}
+              priority
+              className="h-10 sm:h-12 md:h-14 w-auto object-contain"
+            />
           </Link>
         </div>
       </div>
