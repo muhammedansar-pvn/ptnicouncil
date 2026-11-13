@@ -284,7 +284,7 @@ export default function RegistrationForm() {
                 <span>Registering Delegate...</span>
               </>
             ) : (
-              <span>Complete Registration</span>
+              <span>Register Now</span>
             )}
           </button>
           <p className="text-center text-[11px] text-[#64748B] mt-2">
