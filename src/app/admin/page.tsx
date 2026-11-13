@@ -25,6 +25,8 @@ import {
   ChevronRight,
   Database,
   CheckCircle2,
+  Copy,
+  Check,
 } from "lucide-react";
 import { UNITS } from "@/lib/constants";
 
@@ -68,9 +70,39 @@ export default function AdminPage() {
   const [isMigrating, setIsMigrating] = useState(false);
   const [migrationReport, setMigrationReport] = useState<any>(null);
 
+  // Overall stats state
+  const [overallUnitCounts, setOverallUnitCounts] = useState<Record<string, number>>({});
+  const [overallTotal, setOverallTotal] = useState<number>(0);
+
+  // WhatsApp copy state
+  const [copyingUnit, setCopyingUnit] = useState<string | null>(null);
+  const [copiedSuccess, setCopiedSuccess] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => {
+      setToastMessage((prev) => (prev === msg ? null : prev));
+    }, 3500);
+  };
+
+  const fetchOverallStats = async () => {
+    try {
+      const res = await fetch("/api/stats");
+      const data = await res.json();
+      if (data.success) {
+        setOverallUnitCounts(data.unitCounts || {});
+        setOverallTotal(data.total || 0);
+      }
+    } catch (e) {
+      console.error("Stats fetch error:", e);
+    }
+  };
+
   const fetchRegistrations = async (pageToFetch: number = currentPage) => {
     setIsLoadingData(true);
     try {
+      fetchOverallStats();
       const params = new URLSearchParams();
       if (searchQuery) params.append("search", searchQuery);
       if (selectedUnit && selectedUnit !== "ALL") params.append("unit", selectedUnit);
@@ -218,6 +250,103 @@ export default function AdminPage() {
     const params = new URLSearchParams();
     if (selectedUnit && selectedUnit !== "ALL") params.append("unit", selectedUnit);
     window.location.href = `/api/admin/export?${params.toString()}`;
+  };
+
+  const copyWhatsAppFormat = async (unitToCopy: string = selectedUnit) => {
+    setCopyingUnit(unitToCopy);
+    try {
+      const params = new URLSearchParams();
+      params.append("limit", "0"); // all records
+      if (unitToCopy && unitToCopy !== "ALL") {
+        params.append("unit", unitToCopy);
+      }
+
+      const res = await fetch(`/api/admin/registrations?${params.toString()}`);
+      if (res.status === 401) {
+        setIsAuthenticated(false);
+        return;
+      }
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        alert("Failed to fetch registration data for WhatsApp.");
+        return;
+      }
+
+      const records: RegistrationItem[] = data.registrations || [];
+      let text = "";
+
+      if (unitToCopy && unitToCopy !== "ALL") {
+        text = `*SSF PUTHANATHANI SECTOR STUDENT COUNCIL 2026*\n📍 *Unit:* ${unitToCopy}\n👥 *Total Registrations:* ${records.length}\n\n`;
+        if (records.length === 0) {
+          text += `_No registered delegates found for this unit._\n`;
+        } else {
+          records.forEach((item, index) => {
+            text += `${index + 1}. *${item.name}*\n   📞 ${item.mobile}`;
+            if (item.instagramId) {
+              text += `\n   📸 @${item.instagramId.replace(/^@/, "")}`;
+            }
+            text += `\n\n`;
+          });
+        }
+        text += `_SSF Puthanathani Sector Student Council 2026_`;
+      } else {
+        text = `*SSF PUTHANATHANI SECTOR STUDENT COUNCIL 2026*\n📊 *UNIT-WISE REGISTRATIONS*\n👥 *Total Delegates:* ${records.length}\n\n`;
+        const grouped: Record<string, RegistrationItem[]> = {};
+        UNITS.forEach((u) => { grouped[u] = []; });
+        records.forEach((r) => {
+          if (!grouped[r.unit]) grouped[r.unit] = [];
+          grouped[r.unit].push(r);
+        });
+
+        UNITS.forEach((u) => {
+          const list = grouped[u] || [];
+          text += `━━━━━━━━━━━━━━━━━━━\n📍 *${u.toUpperCase()}* (${list.length})\n`;
+          if (list.length === 0) {
+            text += `_No registrations_\n\n`;
+          } else {
+            list.forEach((item, idx) => {
+              text += `${idx + 1}. *${item.name}* - ${item.mobile}`;
+              if (item.instagramId) {
+                text += ` (@${item.instagramId.replace(/^@/, "")})`;
+              }
+              text += `\n`;
+            });
+            text += `\n`;
+          }
+        });
+        text += `_SSF Puthanathani Sector Student Council 2026_`;
+      }
+
+      let copied = false;
+      if (navigator?.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(text);
+          copied = true;
+        } catch {}
+      }
+      if (!copied) {
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.style.position = "fixed";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
+
+      setCopiedSuccess(unitToCopy);
+      setTimeout(() => setCopiedSuccess(null), 3000);
+      const targetLabel = unitToCopy === "ALL" ? "All Units" : unitToCopy;
+      showToast(`Copied ${targetLabel} (${records.length} registrations) in WhatsApp format!`);
+    } catch (err) {
+      console.error("WhatsApp copy error:", err);
+      alert("Failed to copy WhatsApp format.");
+    } finally {
+      setCopyingUnit(null);
+    }
   };
 
   // Unit-wise statistics calculation
@@ -460,19 +589,46 @@ export default function AdminPage() {
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
             {UNITS.map((unit) => {
-              const count = unitStats[unit] || 0;
-              const percentage = totalCount > 0 ? Math.round((count / totalCount) * 100) : 0;
+              const count = overallUnitCounts[unit] !== undefined ? overallUnitCounts[unit] : (unitStats[unit] || 0);
+              const total = overallTotal > 0 ? overallTotal : totalCount;
+              const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
+              const isCopied = copiedSuccess === unit;
+              const isCopying = copyingUnit === unit;
+
               return (
                 <div
                   key={unit}
                   onClick={() => setSelectedUnit(unit)}
-                  className={`p-3 rounded-md border transition-colors cursor-pointer ${
+                  className={`p-3 rounded-md border transition-all cursor-pointer relative group ${
                     selectedUnit === unit
-                      ? "border-[#0756A0] bg-[#EEF4FA]"
+                      ? "border-[#0756A0] bg-[#EEF4FA] shadow-xs ring-1 ring-[#0756A0]"
                       : "border-[#E5EAF1] bg-[#F7F9FC] hover:bg-slate-100/70"
                   }`}
                 >
-                  <p className="text-xs font-bold text-[#172033] truncate">{unit}</p>
+                  <div className="flex items-center justify-between gap-1">
+                    <p className="text-xs font-bold text-[#172033] truncate" title={unit}>
+                      {unit}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        copyWhatsAppFormat(unit);
+                      }}
+                      disabled={isCopying}
+                      className="p-1 rounded text-[#64748B] hover:text-[#128C7E] hover:bg-white transition-colors shrink-0"
+                      title={`Copy ${unit} participants in WhatsApp format`}
+                      aria-label={`Copy ${unit} WhatsApp data`}
+                    >
+                      {isCopying ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-[#128C7E]" />
+                      ) : isCopied ? (
+                        <Check className="w-3.5 h-3.5 text-[#128C7E]" />
+                      ) : (
+                        <Copy className="w-3.5 h-3.5 opacity-60 group-hover:opacity-100" />
+                      )}
+                    </button>
+                  </div>
                   <div className="flex items-baseline justify-between mt-1">
                     <span className="text-lg font-bold font-mono text-[#0756A0]">{count}</span>
                     <span className="text-[10px] text-[#64748B] font-mono">{percentage}%</span>
@@ -542,6 +698,29 @@ export default function AdminPage() {
                 title="Refresh table"
               >
                 <RefreshCw className={`w-3.5 h-3.5 ${isLoadingData ? "animate-spin text-[#0756A0]" : ""}`} />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => copyWhatsAppFormat(selectedUnit)}
+                disabled={copyingUnit !== null}
+                className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md bg-[#128C7E] hover:bg-[#075E54] active:scale-[0.99] text-white font-bold text-xs uppercase tracking-wider transition-colors cursor-pointer disabled:opacity-75 shadow-xs"
+                title="Copy registered participants in WhatsApp format"
+              >
+                {copyingUnit === selectedUnit ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                ) : copiedSuccess === selectedUnit ? (
+                  <Check className="w-3.5 h-3.5 text-white" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5 text-white" />
+                )}
+                <span>
+                  {copiedSuccess === selectedUnit
+                    ? "Copied!"
+                    : selectedUnit !== "ALL"
+                    ? `WhatsApp (${selectedUnit})`
+                    : "WhatsApp Copy"}
+                </span>
               </button>
 
               <button
@@ -810,6 +989,22 @@ export default function AdminPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toastMessage && (
+        <div className="fixed bottom-6 right-6 z-50 bg-[#128C7E] text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2.5 text-xs font-semibold border border-emerald-400">
+          <Check className="w-4 h-4 shrink-0 text-white" />
+          <span>{toastMessage}</span>
+          <button
+            type="button"
+            onClick={() => setToastMessage(null)}
+            className="ml-2 text-white/80 hover:text-white"
+            aria-label="Close notification"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
     </div>
