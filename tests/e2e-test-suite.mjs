@@ -30,6 +30,7 @@ async function runTests() {
   const baseIp = `10.${Math.floor(1 + Math.random() * 200)}.${Math.floor(1 + Math.random() * 200)}`;
   let registeredId = null;
   let adminCookie = null;
+  const cleanupIds = [];
 
   const postRegister = (body, ipSuffix = 1) =>
     fetch(`${BASE_URL}/api/register`, {
@@ -131,12 +132,13 @@ async function runTests() {
   // 6. Scenario 6: Concurrent Duplicate Submissions
   try {
     const concurrentMobile = `984${Math.floor(1000000 + Math.random() * 9000000)}`.slice(0, 10);
+    const concurrentIp = `192.168.10.${Math.floor(1 + Math.random() * 250)}`;
     const postPayload = () =>
       fetch(`${BASE_URL}/api/register`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Forwarded-For": "192.168.10.50",
+          "X-Forwarded-For": concurrentIp,
         },
         body: JSON.stringify({
           name: "Concurrent Test",
@@ -146,6 +148,10 @@ async function runTests() {
       });
 
     const [resA, resB] = await Promise.all([postPayload(), postPayload()]);
+    const dataA = await resA.json();
+    const dataB = await resB.json();
+    if (dataA.data?.id) cleanupIds.push(dataA.data.id);
+    if (dataB.data?.id) cleanupIds.push(dataB.data.id);
     const statuses = [resA.status, resB.status];
     const hasOneSuccess = statuses.includes(201);
     const hasOneConflict = statuses.includes(409);
@@ -160,14 +166,14 @@ async function runTests() {
 
   // 7. Scenario 7: Rate-Limit Enforcement
   try {
-    // Generate a dedicated test IP header or multiple fast calls
+    const rateLimitIp = `198.51.100.${Math.floor(1 + Math.random() * 250)}`;
     let wasRateLimited = false;
     for (let i = 0; i < 7; i++) {
       const res = await fetch(`${BASE_URL}/api/register`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Forwarded-For": "198.51.100.99",
+          "X-Forwarded-For": rateLimitIp,
         },
         body: JSON.stringify({
           name: "Rate Limit Tester",
@@ -175,6 +181,12 @@ async function runTests() {
           mobile: `984${Math.floor(1000000 + Math.random() * 9000000)}`.slice(0, 10),
         }),
       });
+      if (res.status === 201) {
+        try {
+          const rlData = await res.json();
+          if (rlData.data?.id) cleanupIds.push(rlData.data.id);
+        } catch (_) {}
+      }
       if (res.status === 429) {
         wasRateLimited = true;
         break;
@@ -314,11 +326,12 @@ async function runTests() {
     // First register a dedicated pass for lookup testing
     const lookupMobile = `984${Math.floor(1000000 + Math.random() * 9000000)}`.slice(0, 10);
     const lookupName = "Lookup Verification User";
+    const lookupIp = `192.168.20.${Math.floor(1 + Math.random() * 250)}`;
     const regRes = await fetch(`${BASE_URL}/api/register`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Forwarded-For": "192.168.20.75",
+        "X-Forwarded-For": lookupIp,
       },
       body: JSON.stringify({
         name: lookupName,
@@ -327,11 +340,14 @@ async function runTests() {
       }),
     });
 
+    const regData = await regRes.json();
+    if (regData.data?.id) cleanupIds.push(regData.data.id);
+
     const res = await fetch(`${BASE_URL}/api/lookup`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Forwarded-For": "192.168.20.75",
+        "X-Forwarded-For": lookupIp,
       },
       body: JSON.stringify({
         mobile: lookupMobile,
@@ -361,6 +377,19 @@ async function runTests() {
     );
   } catch (e) {
     assert(false, "Scenario 15: Mobile Responsiveness", e.message);
+  }
+
+  // Automated cleanup of all temporary test records
+  if (cleanupIds.length > 0 && adminCookie) {
+    for (const testId of cleanupIds) {
+      try {
+        await fetch(`${BASE_URL}/api/admin/registrations/${testId}`, {
+          method: "DELETE",
+          headers: { Cookie: adminCookie },
+        });
+      } catch (_) {}
+    }
+    console.log(`🧹 Test cleanup: Removed ${cleanupIds.length} temporary test records.`);
   }
 
   console.log("\n=================================");
