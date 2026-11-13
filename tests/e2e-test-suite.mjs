@@ -261,7 +261,7 @@ async function runTests() {
         },
         body: JSON.stringify({
           name: `${testName} (Updated)`,
-          unit: "Vettichira East",
+          unit: "Kunnumpuram",
           mobile: testMobile,
           instagramId: "updated_ssf",
         }),
