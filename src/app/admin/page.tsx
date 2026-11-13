@@ -21,6 +21,10 @@ import {
   BarChart3,
   Calendar,
   Building,
+  ChevronLeft,
+  ChevronRight,
+  Database,
+  CheckCircle2,
 } from "lucide-react";
 import { UNITS } from "@/lib/constants";
 
@@ -41,6 +45,11 @@ export default function AdminPage() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const [registrations, setRegistrations] = useState<RegistrationItem[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedUnit, setSelectedUnit] = useState("ALL");
@@ -55,12 +64,18 @@ export default function AdminPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  const fetchRegistrations = async () => {
+  // Migration state
+  const [isMigrating, setIsMigrating] = useState(false);
+  const [migrationReport, setMigrationReport] = useState<any>(null);
+
+  const fetchRegistrations = async (pageToFetch: number = currentPage) => {
     setIsLoadingData(true);
     try {
       const params = new URLSearchParams();
       if (searchQuery) params.append("search", searchQuery);
       if (selectedUnit && selectedUnit !== "ALL") params.append("unit", selectedUnit);
+      params.append("page", pageToFetch.toString());
+      params.append("limit", pageSize.toString());
 
       const res = await fetch(`/api/admin/registrations?${params.toString()}`);
       if (res.status === 401) {
@@ -72,6 +87,9 @@ export default function AdminPage() {
       const data = await res.json();
       if (data.success) {
         setRegistrations(data.registrations || []);
+        setTotalCount(data.totalCount || 0);
+        setTotalPages(data.totalPages || 1);
+        setCurrentPage(data.page || 1);
         setIsAuthenticated(true);
       }
     } catch (err) {
@@ -82,12 +100,12 @@ export default function AdminPage() {
   };
 
   useEffect(() => {
-    fetchRegistrations();
-  }, [selectedUnit]);
+    fetchRegistrations(1);
+  }, [selectedUnit, pageSize]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    fetchRegistrations();
+    fetchRegistrations(1);
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -105,7 +123,7 @@ export default function AdminPage() {
       const data = await res.json();
       if (res.ok && data.success) {
         setIsAuthenticated(true);
-        fetchRegistrations();
+        fetchRegistrations(1);
       } else {
         setLoginError(data.message || "Invalid credentials");
       }
@@ -148,7 +166,7 @@ export default function AdminPage() {
       const data = await res.json();
       if (res.ok && data.success) {
         setEditingItem(null);
-        fetchRegistrations();
+        fetchRegistrations(currentPage);
       } else {
         setEditError(data.message || "Update failed");
       }
@@ -170,12 +188,29 @@ export default function AdminPage() {
       const data = await res.json();
       if (res.ok && data.success) {
         setDeletingId(null);
-        fetchRegistrations();
+        fetchRegistrations(currentPage);
       }
     } catch (err) {
       console.error("Delete error:", err);
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleTriggerMigration = async () => {
+    setIsMigrating(true);
+    setMigrationReport(null);
+    try {
+      const res = await fetch("/api/admin/migrate", { method: "POST" });
+      const data = await res.json();
+      if (data.success) {
+        setMigrationReport(data.report);
+        fetchRegistrations(1);
+      }
+    } catch (err) {
+      console.error("Migration error:", err);
+    } finally {
+      setIsMigrating(false);
     }
   };
 
@@ -317,6 +352,15 @@ export default function AdminPage() {
           </div>
 
           <div className="flex items-center gap-2.5">
+            <button
+              onClick={handleTriggerMigration}
+              disabled={isMigrating}
+              className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold text-[#0756A0] bg-[#EEF4FA] hover:bg-blue-100/70 border border-blue-200 transition-colors cursor-pointer"
+              title="Sync local JSON records into MongoDB"
+            >
+              <Database className={`w-3.5 h-3.5 ${isMigrating ? "animate-spin" : ""}`} />
+              <span>{isMigrating ? "Syncing..." : "Sync DB"}</span>
+            </button>
             <Link
               href="/"
               target="_blank"
@@ -336,6 +380,23 @@ export default function AdminPage() {
         </div>
       </header>
 
+      {/* Migration Report Alert */}
+      {migrationReport && (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4 w-full">
+          <div className="p-3.5 rounded-lg bg-blue-50 border border-blue-200 text-xs flex items-center justify-between text-blue-900">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-[#0756A0]" />
+              <span>
+                <strong>DB Sync Complete</strong>: {migrationReport.imported} imported, {migrationReport.skippedDuplicates} already up-to-date. Total in MongoDB: {migrationReport.totalInMongoAfter}.
+              </span>
+            </div>
+            <button onClick={() => setMigrationReport(null)} className="text-blue-500 hover:text-blue-800">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Admin Dashboard Body */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 w-full space-y-6">
         {/* KPI Summary Cards */}
@@ -346,7 +407,7 @@ export default function AdminPage() {
             </div>
             <div>
               <p className="text-[11px] font-bold uppercase text-[#64748B] tracking-wider">Total Registered</p>
-              <p className="text-xl font-bold font-mono text-[#172033]">{registrations.length}</p>
+              <p className="text-xl font-bold font-mono text-[#172033]">{totalCount}</p>
             </div>
           </div>
 
@@ -398,7 +459,7 @@ export default function AdminPage() {
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5">
             {UNITS.map((unit) => {
               const count = unitStats[unit] || 0;
-              const percentage = registrations.length > 0 ? Math.round((count / registrations.length) * 100) : 0;
+              const percentage = totalCount > 0 ? Math.round((count / totalCount) * 100) : 0;
               return (
                 <div
                   key={unit}
@@ -431,6 +492,7 @@ export default function AdminPage() {
               </div>
               <input
                 type="text"
+                maxLength={80}
                 placeholder="Search name or mobile..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -440,6 +502,7 @@ export default function AdminPage() {
 
             {/* Filter and Export Actions */}
             <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+              {/* Unit Dropdown */}
               <div className="flex items-center gap-1.5">
                 <Filter className="w-3.5 h-3.5 text-[#64748B] shrink-0" />
                 <select
@@ -456,8 +519,22 @@ export default function AdminPage() {
                 </select>
               </div>
 
+              {/* Page Size Selector */}
+              <select
+                value={pageSize}
+                onChange={(e) => setPageSize(parseInt(e.target.value, 10))}
+                className="bg-white border border-[#E5EAF1] rounded-md px-2 h-9 text-xs font-medium text-[#172033] focus:outline-none focus:border-[#0756A0] cursor-pointer"
+                title="Page size"
+              >
+                <option value={10}>10 / page</option>
+                <option value={25}>25 / page</option>
+                <option value={50}>50 / page</option>
+                <option value={100}>100 / page</option>
+                <option value={0}>All</option>
+              </select>
+
               <button
-                onClick={fetchRegistrations}
+                onClick={() => fetchRegistrations(currentPage)}
                 disabled={isLoadingData}
                 className="h-9 px-2.5 rounded-md border border-[#E5EAF1] bg-white hover:bg-slate-50 text-[#64748B] transition-colors cursor-pointer"
                 title="Refresh table"
@@ -485,7 +562,7 @@ export default function AdminPage() {
                   <th className="py-2.5 px-3.5">Unit</th>
                   <th className="py-2.5 px-3.5">Mobile</th>
                   <th className="py-2.5 px-3.5">Instagram</th>
-                  <th className="py-2.5 px-3.5">Date & Time (IST)</th>
+                  <th className="py-2.5 px-3.5">Registration Time (IST)</th>
                   <th className="py-2.5 px-3.5 text-right">Actions</th>
                 </tr>
               </thead>
@@ -519,10 +596,12 @@ export default function AdminPage() {
                       hour12: true,
                     });
 
+                    const rowNumber = pageSize > 0 ? (currentPage - 1) * pageSize + index + 1 : index + 1;
+
                     return (
                       <tr key={item._id} className="hover:bg-slate-50 transition-colors">
                         <td className="py-2.5 px-3.5 text-center font-mono text-[#64748B]">
-                          {index + 1}
+                          {rowNumber}
                         </td>
                         <td className="py-2.5 px-3.5 font-bold text-[#172033]">
                           {item.name}
@@ -568,11 +647,37 @@ export default function AdminPage() {
             </table>
           </div>
 
-          {/* Table Footer */}
-          <div className="p-3 border-t border-[#E5EAF1] bg-[#F7F9FC] flex items-center justify-between text-[11px] text-[#64748B]">
+          {/* Table Footer with Server-Side Pagination */}
+          <div className="p-3 border-t border-[#E5EAF1] bg-[#F7F9FC] flex flex-col sm:flex-row items-center justify-between gap-3 text-[11px] text-[#64748B]">
             <span>
-              Total: <strong>{registrations.length}</strong> registered delegates
+              Showing <strong>{registrations.length}</strong> of <strong>{totalCount}</strong> delegates
             </span>
+
+            {/* Pagination Controls */}
+            {pageSize > 0 && totalPages > 1 && (
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => fetchRegistrations(currentPage - 1)}
+                  disabled={currentPage <= 1 || isLoadingData}
+                  className="p-1 rounded border border-[#E5EAF1] bg-white hover:bg-slate-50 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+                  title="Previous page"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="px-2 font-mono font-medium">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  onClick={() => fetchRegistrations(currentPage + 1)}
+                  disabled={currentPage >= totalPages || isLoadingData}
+                  className="p-1 rounded border border-[#E5EAF1] bg-white hover:bg-slate-50 disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+                  title="Next page"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
             <span>SSF Puthanathani Sector Student Council 2026</span>
           </div>
         </div>

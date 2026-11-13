@@ -47,6 +47,12 @@ export default function Navbar() {
               Venue
             </Link>
             <Link
+              href="/lookup"
+              className="text-xs font-semibold uppercase tracking-wider text-[#64748B] hover:text-[#0756A0] transition-colors"
+            >
+              Find Pass
+            </Link>
+            <Link
               href="#register"
               className="px-4 py-2 rounded-md bg-[#0756A0] hover:bg-[#054380] text-white text-xs font-bold uppercase tracking-wider transition-colors shadow-xs"
             >
@@ -103,6 +109,13 @@ export default function Navbar() {
             className="block px-3 py-2 rounded-md text-xs font-semibold uppercase tracking-wider text-[#172033] hover:bg-slate-50 hover:text-[#0756A0]"
           >
             Venue Details
+          </Link>
+          <Link
+            href="/lookup"
+            onClick={() => setMobileMenuOpen(false)}
+            className="block px-3 py-2 rounded-md text-xs font-semibold uppercase tracking-wider text-[#172033] hover:bg-slate-50 hover:text-[#0756A0]"
+          >
+            Find My Pass
           </Link>
           <Link
             href="#register"

@@ -1,10 +1,37 @@
 import { cookies } from "next/headers";
 import crypto from "crypto";
+import bcrypt from "bcryptjs";
 
 const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
+// In production, ADMIN_PASSWORD_HASH or a strong ADMIN_PASSWORD is required
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "ssf2026";
+const ADMIN_PASSWORD_HASH = process.env.ADMIN_PASSWORD_HASH;
+
 const AUTH_SECRET = process.env.ADMIN_SECRET || "ssf_puthanathani_sector_student_council_secret_2026";
 const COOKIE_NAME = "ssf_council_admin_session";
+
+export async function verifyAdminCredentials(username: string, passwordAttempt: string): Promise<boolean> {
+  if (username !== ADMIN_USERNAME) return false;
+
+  // 1. If a bcrypt hash is provided via environment, compare with bcrypt
+  if (ADMIN_PASSWORD_HASH) {
+    try {
+      return await bcrypt.compare(passwordAttempt, ADMIN_PASSWORD_HASH);
+    } catch {
+      return false;
+    }
+  }
+
+  // 2. Otherwise compare with ADMIN_PASSWORD using timing-safe comparison
+  try {
+    const attemptBuf = Buffer.from(passwordAttempt);
+    const expectedBuf = Buffer.from(ADMIN_PASSWORD);
+    if (attemptBuf.length !== expectedBuf.length) return false;
+    return crypto.timingSafeEqual(attemptBuf, expectedBuf);
+  } catch {
+    return false;
+  }
+}
 
 export function createSessionToken(): string {
   const timestamp = Date.now().toString();
@@ -44,4 +71,4 @@ export async function isAuthenticated(): Promise<boolean> {
   return verifySessionToken(token);
 }
 
-export { ADMIN_USERNAME, ADMIN_PASSWORD, COOKIE_NAME };
+export { ADMIN_USERNAME, COOKIE_NAME };

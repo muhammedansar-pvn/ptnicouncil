@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 
 const MONGODB_URI = process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/ssf_student_council";
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
 
 interface GlobalWithMongoose {
   mongoose?: {
@@ -24,10 +25,16 @@ export async function connectToDatabase(): Promise<boolean> {
     return true;
   }
 
+  // In production, enforce that MONGODB_URI must be provided
+  if (IS_PRODUCTION && (!process.env.MONGODB_URI || process.env.MONGODB_URI.includes("127.0.0.1"))) {
+    console.warn("Production warning: MONGODB_URI is not pointing to a production cluster.");
+  }
+
   if (!cached?.promise) {
     const opts = {
       bufferCommands: false,
-      serverSelectionTimeoutMS: 3000,
+      serverSelectionTimeoutMS: 4000,
+      connectTimeoutMS: 5000,
     };
 
     cached!.promise = mongoose.connect(MONGODB_URI, opts).then((m) => {
@@ -41,14 +48,15 @@ export async function connectToDatabase(): Promise<boolean> {
     return true;
   } catch (err) {
     cached!.promise = null;
-    console.warn("MongoDB connection failed or unavailable. Using persistent local fallback storage.", (err as Error).message);
+    console.error("MongoDB connection failed:", (err as Error).message);
     return false;
   }
 }
 
-// Local File Persistence Fallback (Ensures zero downtime even if MongoDB is not started yet)
+// Local File Persistence (Only permitted in Development mode)
 const DATA_DIR = path.join(process.cwd(), "data");
 const DATA_FILE = path.join(DATA_DIR, "registrations.json");
+const BACKUP_FILE = path.join(DATA_DIR, "registrations.backup.json");
 
 export interface StoredRegistration {
   _id: string;
@@ -58,6 +66,18 @@ export interface StoredRegistration {
   instagramId?: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export function backupLocalRegistrations(): void {
+  try {
+    if (fs.existsSync(DATA_FILE)) {
+      const content = fs.readFileSync(DATA_FILE, "utf-8");
+      fs.writeFileSync(BACKUP_FILE, content, "utf-8");
+      console.log("Local registrations successfully backed up to registrations.backup.json");
+    }
+  } catch (e) {
+    console.error("Failed to backup local registrations:", e);
+  }
 }
 
 export function getLocalRegistrations(): StoredRegistration[] {

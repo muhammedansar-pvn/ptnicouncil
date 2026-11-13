@@ -3,6 +3,8 @@ import { isAuthenticated } from "@/lib/auth";
 import { connectToDatabase, updateLocalRegistration, deleteLocalRegistration } from "@/lib/db";
 import Registration from "@/models/Registration";
 import { UNITS } from "@/lib/constants";
+import { logAdminActivity } from "@/lib/activityLog";
+import { getClientIp } from "@/lib/rateLimit";
 
 export async function PUT(
   request: NextRequest,
@@ -17,12 +19,13 @@ export async function PUT(
       );
     }
 
+    const clientIp = getClientIp(request);
     const { id } = await params;
     const body = await request.json();
     const { name, unit, mobile, instagramId } = body;
 
     // Validation
-    if (!name || name.trim().length === 0) {
+    if (!name || typeof name !== "string" || name.trim().length === 0) {
       return NextResponse.json(
         { success: false, message: "Name is required" },
         { status: 400 }
@@ -79,13 +82,15 @@ export async function PUT(
         );
       }
 
-      // Sync local
+      // Sync local in dev
       updateLocalRegistration(id, {
         name: name.trim(),
         unit,
         mobile: trimmedMobile,
         instagramId: cleanInstagram,
       });
+
+      logAdminActivity("EDIT", `Updated delegate ${name.trim()} (${trimmedMobile}, unit: ${unit})`, clientIp, id);
 
       return NextResponse.json({
         success: true,
@@ -107,6 +112,8 @@ export async function PUT(
         );
       }
 
+      logAdminActivity("EDIT", `Updated local delegate ${name.trim()} (${trimmedMobile})`, clientIp, id);
+
       return NextResponse.json({
         success: true,
         message: "Registration updated successfully",
@@ -123,7 +130,7 @@ export async function PUT(
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -135,14 +142,17 @@ export async function DELETE(
       );
     }
 
+    const clientIp = getClientIp(request);
     const { id } = await params;
     const isDbConnected = await connectToDatabase();
 
     if (isDbConnected) {
-      await Registration.findByIdAndDelete(id);
+      const deleted = await Registration.findByIdAndDelete(id);
       deleteLocalRegistration(id);
+      logAdminActivity("DELETE", `Deleted delegate ID ${id} (${deleted?.name || "unknown"})`, clientIp, id);
     } else {
       deleteLocalRegistration(id);
+      logAdminActivity("DELETE", `Deleted local delegate ID ${id}`, clientIp, id);
     }
 
     return NextResponse.json({

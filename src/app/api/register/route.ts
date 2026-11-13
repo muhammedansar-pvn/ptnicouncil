@@ -2,9 +2,33 @@ import { NextRequest, NextResponse } from "next/server";
 import { connectToDatabase, getLocalRegistrations, saveLocalRegistration, StoredRegistration } from "@/lib/db";
 import Registration from "@/models/Registration";
 import { UNITS } from "@/lib/constants";
+import { checkRateLimit, getClientIp } from "@/lib/rateLimit";
+
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
 
 export async function POST(request: NextRequest) {
   try {
+    const clientIp = getClientIp(request);
+
+    // Rate Limiting: Max 5 registration attempts per 10 minutes per IP
+    const rateLimit = await checkRateLimit(`register:${clientIp}`, 5, 10 * 60 * 1000);
+    if (!rateLimit.success) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: `Too many registration attempts from this device. Please wait ${Math.ceil(
+            rateLimit.resetInSeconds / 60
+          )} minutes before trying again.`,
+        },
+        {
+          status: 429,
+          headers: {
+            "Retry-After": rateLimit.resetInSeconds.toString(),
+          },
+        }
+      );
+    }
+
     const body = await request.json();
     const { name, unit, mobile, instagramId } = body;
 
@@ -12,6 +36,13 @@ export async function POST(request: NextRequest) {
     if (!name || typeof name !== "string" || name.trim().length === 0) {
       return NextResponse.json(
         { success: false, message: "Full Name is required" },
+        { status: 400 }
+      );
+    }
+
+    if (name.trim().length < 3) {
+      return NextResponse.json(
+        { success: false, message: "Name must be at least 3 characters" },
         { status: 400 }
       );
     }
@@ -50,6 +81,17 @@ export async function POST(request: NextRequest) {
 
     const isDbConnected = await connectToDatabase();
 
+    // Production rule: If DB is unreachable, return 503 instead of silent local fallback
+    if (IS_PRODUCTION && !isDbConnected) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Registration database service is temporarily unavailable. Please try again shortly.",
+        },
+        { status: 503 }
+      );
+    }
+
     if (isDbConnected) {
       // Check duplicate mobile in MongoDB
       const existing = await Registration.findOne({ mobile: trimmedMobile });
@@ -63,7 +105,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Create new registration
+      // Create new registration in MongoDB
       const registration = await Registration.create({
         name: cleanName,
         unit,
@@ -71,16 +113,18 @@ export async function POST(request: NextRequest) {
         instagramId: cleanInstagram,
       });
 
-      // Also mirror to local storage
-      saveLocalRegistration({
-        _id: registration._id.toString(),
-        name: cleanName,
-        unit,
-        mobile: trimmedMobile,
-        instagramId: cleanInstagram,
-        createdAt: registration.createdAt.toISOString(),
-        updatedAt: registration.updatedAt.toISOString(),
-      });
+      // Mirror to local storage in development
+      if (!IS_PRODUCTION) {
+        saveLocalRegistration({
+          _id: registration._id.toString(),
+          name: cleanName,
+          unit,
+          mobile: trimmedMobile,
+          instagramId: cleanInstagram,
+          createdAt: registration.createdAt.toISOString(),
+          updatedAt: registration.updatedAt.toISOString(),
+        });
+      }
 
       return NextResponse.json(
         {
@@ -98,7 +142,7 @@ export async function POST(request: NextRequest) {
         { status: 201 }
       );
     } else {
-      // Fallback local persistence
+      // Development-only local persistence fallback
       const localRecords = getLocalRegistrations();
       const existing = localRecords.find((r) => r.mobile === trimmedMobile);
       if (existing) {
